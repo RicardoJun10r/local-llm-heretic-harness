@@ -15,24 +15,25 @@ echo ">> Criando venv..."
 uv venv .venv
 source .venv/bin/activate
 
+NO_CACHE_FLAG=""
 if command -v nvidia-smi >/dev/null 2>&1; then
     echo ">> GPU NVIDIA detectada:"
     nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
     echo ">> Instalando torch com suporte CUDA (cu124)..."
     uv pip install torch --index-url https://download.pytorch.org/whl/cu124
-    export LLAMA_CUDA=1
+    export FORCE_CMAKE=1
     export CMAKE_ARGS="-DGGML_CUDA=on"
+    # Evita reaproveitar do cache do uv um wheel de llama-cpp-python compilado
+    # sem CUDA em outro projeto desta máquina.
+    NO_CACHE_FLAG="--no-cache"
 else
     echo ">> Nenhuma GPU NVIDIA detectada — instalando torch CPU-only."
     uv pip install torch --index-url https://download.pytorch.org/whl/cpu
     unset CMAKE_ARGS
 fi
 
-echo ">> Instalando dependências do projeto..."
-uv pip install -e .
-
-echo ">> Instalando llama-cpp-python (harness de inferência)..."
-uv pip install llama-cpp-python
+echo ">> Instalando dependências do projeto (incluindo llama-cpp-python, extra 'harness')..."
+uv pip install -e ".[harness]" $NO_CACHE_FLAG
 
 echo ""
 echo "=== Verificação ==="

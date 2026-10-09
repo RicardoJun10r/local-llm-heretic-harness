@@ -3,7 +3,7 @@
 #
 # Uso:
 #   ./scripts/02_run_heretic.sh models/qwen2.5-7b-instruct
-#   N_TRIALS=60 QUANTIZATION=bnb_4bit ./scripts/02_run_heretic.sh models/qwen2.5-7b-instruct
+#   N_TRIALS=60 QUANTIZATION=BNB_4BIT ./scripts/02_run_heretic.sh models/qwen2.5-7b-instruct
 #
 # Variáveis de ambiente (todas opcionais, com defaults sensatos p/ GPU):
 #   N_TRIALS        número de trials de otimização (default: 200, o padrão do Heretic)

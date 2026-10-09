@@ -28,7 +28,7 @@ em CPU-only (mais lento).
 ## 1. Setup
 
 ```bash
-git clone <este-repo>
+git clone https://github.com/RicardoJun10r/local-llm-heretic-harness
 cd local-llm-heretic-harness
 chmod +x scripts/*.sh
 ./scripts/00_setup.sh
@@ -106,9 +106,14 @@ Se a máquina tem GPU, o `llama.cpp` é compilado com suporte CUDA automaticamen
 ```bash
 export MODEL_PATH=models/gguf/<nome>-q4_k_m.gguf
 export N_GPU_LAYERS=-1   # offload de todas as camadas para a GPU; use 0 para CPU-only
-cd harness
-python agent.py
+python harness/agent.py
 ```
+
+> Rode a partir da raiz do projeto (não entre em `harness/` antes) — `MODEL_PATH` é
+> resolvido relativo ao diretório de trabalho atual, e o sandbox das tools
+> (`HARNESS_ROOT`) usa esse mesmo diretório como raiz por padrão. Os imports internos do
+> harness (`from model import ...` etc.) funcionam normalmente mesmo chamando o script
+> por esse caminho.
 
 O harness (`harness/`) implementa:
 
