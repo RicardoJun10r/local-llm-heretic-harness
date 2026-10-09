@@ -1,11 +1,26 @@
-"""Context elision + summarization: quando o histórico cresce demais, resume
-as mensagens mais antigas em vez de deixar o contexto crescer sem limite."""
+"""Context elision + summarization, em dois limiares baseados em % da janela
+de contexto do modelo (N_CTX):
+
+- >= ELISION_LOWER_RATIO (default 60%): elision simples — descarta as
+  mensagens mais antigas, mantendo só um marcador de quantas foram removidas.
+- >= ELISION_UPPER_RATIO (default 80%): elision + summarization — antes de
+  descartar, pede ao próprio modelo um resumo condensado das mensagens
+  antigas e injeta esse resumo no lugar delas.
+
+Em ambos os casos, o system prompt original e as últimas KEEP_RECENT
+mensagens são preservados intactos.
+"""
 import os
 
-from model import chat, count_tokens
+from model import N_CTX, chat, count_tokens
 
-MAX_CONTEXT_TOKENS = int(os.environ.get("MAX_CONTEXT_TOKENS", "3000"))
+LOWER_RATIO = float(os.environ.get("ELISION_LOWER_RATIO", "0.6"))
+UPPER_RATIO = float(os.environ.get("ELISION_UPPER_RATIO", "0.8"))
 KEEP_RECENT = int(os.environ.get("KEEP_RECENT_MESSAGES", "6"))
+
+# Tag usada para identificar e substituir (em vez de acumular) a mensagem de
+# elision/resumo entre chamadas sucessivas.
+_MARKER_TAG = "[memória condensada]"
 
 
 def total_tokens(messages: list[dict]) -> int:
@@ -25,15 +40,21 @@ def summarize(messages_to_drop: list[dict]) -> str:
     return chat(summary_prompt, max_tokens=200)
 
 
+def _is_marker(msg: dict) -> bool:
+    return msg["role"] == "system" and msg["content"].startswith(_MARKER_TAG)
+
+
 def apply_elision(messages: list[dict]) -> list[dict]:
-    """Se o histórico ficou grande demais, resume as mensagens mais antigas e
-    substitui por uma única nota de resumo, mantendo o system prompt e as
-    mensagens mais recentes intactas."""
-    if total_tokens(messages) <= MAX_CONTEXT_TOKENS:
+    tokens = total_tokens(messages)
+    lower = N_CTX * LOWER_RATIO
+    upper = N_CTX * UPPER_RATIO
+
+    if tokens < lower:
         return messages
 
-    system_msgs = [m for m in messages if m["role"] == "system"]
-    rest = [m for m in messages if m["role"] != "system"]
+    # system prompt original (exclui marcadores de elision de rodadas anteriores)
+    system_msgs = [m for m in messages if m["role"] == "system" and not _is_marker(m)]
+    rest = [m for m in messages if m["role"] != "system" and not _is_marker(m)]
 
     keep_recent = rest[-KEEP_RECENT:]
     to_drop = rest[:-KEEP_RECENT]
@@ -41,7 +62,18 @@ def apply_elision(messages: list[dict]) -> list[dict]:
     if not to_drop:
         return messages
 
-    summary = summarize(to_drop)
-    summary_msg = {"role": "system", "content": f"[Resumo da conversa anterior]: {summary}"}
+    if tokens >= upper:
+        # Pressão alta: elision + summarization.
+        summary = summarize(to_drop)
+        marker = {
+            "role": "system",
+            "content": f"{_MARKER_TAG} Resumo da conversa anterior ({len(to_drop)} mensagens): {summary}",
+        }
+    else:
+        # Pressão moderada: elision simples, sem gastar uma chamada ao modelo.
+        marker = {
+            "role": "system",
+            "content": f"{_MARKER_TAG} {len(to_drop)} mensagens antigas foram removidas para liberar espaço de contexto.",
+        }
 
-    return system_msgs + [summary_msg] + keep_recent
+    return system_msgs + [marker] + keep_recent

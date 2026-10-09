@@ -114,23 +114,33 @@ O harness (`harness/`) implementa:
 
 - **`model.py`** — carrega o GGUF via `llama-cpp-python`, com `N_GPU_LAYERS` configurável.
 - **`tools.py`** — function calling via convenção de prompt (`tool_call` em JSON), com
-  duas ferramentas de exemplo (`read_file`, `calculator`).
-- **`memory.py`** — context elision: quando o histórico passa de `MAX_CONTEXT_TOKENS`
-  (default 3000), as mensagens mais antigas são resumidas pelo próprio modelo e
-  substituídas por uma nota de resumo, em vez de crescer sem limite.
+  quatro ferramentas, restritas a `HARNESS_ROOT` (por padrão, o diretório de trabalho):
+  - `read(path, offset?, limit?)` — lê um arquivo (com numeração de linhas, estilo `cat -n`).
+  - `write(path, content)` — cria/sobrescreve um arquivo.
+  - `grep(pattern, path?, glob?)` — busca regex no conteúdo dos arquivos sob um diretório.
+  - `glob(pattern, path?)` — lista arquivos que casam com um padrão (ex: `**/*.py`).
+- **`memory.py`** — context elision em dois limiares, como % da janela de contexto
+  (`N_CTX`):
+  - **≥ 60%** (`ELISION_LOWER_RATIO`): elision simples — descarta as mensagens mais
+    antigas (mantendo as últimas `KEEP_RECENT_MESSAGES`), sem gastar uma chamada ao modelo.
+  - **≥ 80%** (`ELISION_UPPER_RATIO`): elision + summarization — antes de descartar, pede
+    ao próprio modelo um resumo condensado das mensagens antigas e injeta esse resumo no
+    lugar delas.
 - **`agent.py`** — loop de planning/execução: o system prompt instrui o modelo a esboçar
   um plano antes de agir; o harness itera chamando ferramentas até obter uma resposta
   final ou atingir `MAX_STEPS` (default 5).
 
 Variáveis de ambiente do harness: `MODEL_PATH`, `N_CTX`, `N_THREADS`, `N_GPU_LAYERS`,
-`MAX_CONTEXT_TOKENS`, `KEEP_RECENT_MESSAGES`, `MAX_STEPS`.
+`HARNESS_ROOT`, `ELISION_LOWER_RATIO`, `ELISION_UPPER_RATIO`, `KEEP_RECENT_MESSAGES`,
+`MAX_STEPS`.
 
 ### Roteiro de teste sugerido
 
 1. Pergunta simples (sem tool): `"O que é fotossíntese?"`
-2. Pergunta que exige tool: `"Quanto é 123 * 456?"`
-3. Pergunta multi-passo: `"Leia o arquivo /etc/hostname e me diga quantos caracteres tem."`
-4. Conversa longa (15-20 turnos) para forçar a elision/summarization a disparar.
+2. Pergunta que exige tool: `"Liste os arquivos .py deste projeto."` (dispara `glob`)
+3. Pergunta multi-passo: `"Procure a palavra 'TODO' no projeto e me diga em quais arquivos aparece."` (dispara `grep`, possivelmente seguido de `read`)
+4. `"Crie um arquivo notas.txt com o texto 'teste'."` (dispara `write`)
+5. Conversa longa (15-20 turnos) para forçar a elision (60%) e depois a elision+summarization (80%) a dispararem.
 
 ## Notas e limitações
 
