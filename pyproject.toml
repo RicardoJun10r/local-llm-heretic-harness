@@ -1,0 +1,20 @@
+[project]
+name = "local-llm-heretic-harness"
+version = "0.1.0"
+description = "LLM local, abliteração via Heretic e harness próprio com planning/tools/summarization/elision."
+requires-python = ">=3.10"
+dependencies = [
+    "transformers>=4.45",
+    "accelerate>=0.34",
+    "huggingface_hub[cli]>=0.25",
+    "heretic-llm",
+]
+
+[project.optional-dependencies]
+harness = [
+    "llama-cpp-python",
+]
+
+[tool.uv]
+# torch é instalado separadamente pelo scripts/00_setup.sh, com o índice
+# correto (CPU ou CUDA) conforme o hardware detectado na máquina.
